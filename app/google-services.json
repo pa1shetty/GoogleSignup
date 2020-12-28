@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "741181723842",
+    "project_id": "signup-4d3d4",
+    "storage_bucket": "signup-4d3d4.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741181723842:android:d2b65828da9e77b97a975b",
+        "android_client_info": {
+          "package_name": "com.shetty.googlesignup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "741181723842-ckuf8t4ius035hhlrd6r5o5g7qr4i6g4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpvKFoBou7BR8CW5G832CwxwW3-yfJEsY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "741181723842-ckuf8t4ius035hhlrd6r5o5g7qr4i6g4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

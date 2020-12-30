@@ -1,4 +1,13 @@
 <resources>
     <string name="app_name">GoogleSignup</string>
     <string name="upload_data">Upload Data</string>
+    <string name="network_available">Network connection available.</string>
+    <string name="try_again">Try Again</string>
+    <string name="network_not_available">No network connection available.</string>
+    <string name="click_to_upload">Click on the button to upload the data.</string>
+    <string name="no_login">Could\'nt Log in</string>
+    <string name="no_location_permission">Location permission not given</string>
+    <string name="data_uploaded">Data uploaded!</string>
+    <string name="data_not_uploaded">Could\'nt upaload the data.</string>
+    <string name="checking_internet_connection">Checking internet connection.</string>
 </resources>

@@ -19,7 +19,7 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -43,10 +43,14 @@ dependencies {
     //For Google Sign in
     implementation 'com.google.android.gms:play-services-auth:19.0.0'
     implementation 'com.google.android.gms:play-services-location:17.1.0'
-    implementation('com.google.api-client:google-api-client-android:1.26.0') {
+    implementation('com.google.api-client:google-api-client-android:1.31.1') {
         exclude group: 'org.apache.httpcomponents'
     }
     implementation('com.google.apis:google-api-services-sheets:v4-rev506-1.23.0') {
         exclude group: 'org.apache.httpcomponents'
     }
+
+    implementation 'io.reactivex.rxjava3:rxandroid:3.0.0'
+    implementation 'io.reactivex.rxjava3:rxjava:3.0.0'
+
 }

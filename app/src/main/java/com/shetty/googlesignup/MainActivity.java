@@ -1,42 +1,27 @@
 package com.shetty.googlesignup;
 
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.api.client.extensions.android.http.AndroidHttp;
-import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
-import com.google.api.client.googleapis.extensions.android.gms.auth.GooglePlayServicesAvailabilityIOException;
-import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.client.util.ExponentialBackOff;
-import com.google.api.services.sheets.v4.SheetsScopes;
-
 import android.Manifest;
-import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -44,33 +29,41 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.tasks.Task;
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
+import com.google.api.client.http.HttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.services.sheets.v4.SheetsScopes;
 import com.google.api.services.sheets.v4.model.AppendValuesResponse;
-import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.google.api.services.sheets.v4.model.ValueRange;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.List;
+import java.util.Locale;
+
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Observer;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 
 public class MainActivity extends AppCompatActivity {
-    private  final String TAG ="pavan";
-    public static final int RC_SIGN_IN=1;
+    public static final int RC_SIGN_IN = 1;
     private LocationManager locationManager;
     private Button buttonUploadData;
     private static final int PERMISSION_REQUEST_CODE = 2;
-    private static   GoogleSignInAccount account;
-    private static GoogleAccountCredential mCredential;
+    public static final String spreadsheetId = "1OOjLS6RoB9Z-7sWzz6Rpz0NfBuQAa7bPg2ClBQSA0nA";
+    private static GoogleSignInAccount account;
     private TextView mOutputText;
-    static final int REQUEST_AUTHORIZATION = 1001;
-    static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     ProgressDialog mProgress;
-    public static final String spreadsheetId="1OOjLS6RoB9Z-7sWzz6Rpz0NfBuQAa7bPg2ClBQSA0nA";
+    boolean status = false;
+    private GoogleAccountCredential mCredential;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,56 +71,52 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         mOutputText = findViewById(R.id.tv_message);
         mProgress = new ProgressDialog(this);
+        mProgress.setCanceledOnTouchOutside(false);
         mProgress.show();
-        mProgress.setMessage("Connecting To Google.");
-        getResultsFromApi();
-        updateUI();
+        mProgress.setMessage(getString(R.string.checking_internet_connection));
+        createButton();
+        checkForDeviceStatus();
+
     }
-    private void getResultsFromApi() {
-         if (! isDeviceOnline()) {
-            mOutputText.setText("No network connection available.");
+
+    //To Check whether app has all the permission
+    private void checkForDeviceStatus() {
+        if (isDeviceOnline()) {
             mProgress.hide();
-        }
-        else {
+            mOutputText.setText(R.string.network_available);
             checkSignInStatus();
+        } else {
+            buttonUploadData.setText(R.string.try_again);
+            mProgress.hide();
+            status = false;
+            mOutputText.setText(R.string.network_not_available);
         }
     }
 
 
+    //To Create Upload Button
+    private void createButton() {
+        buttonUploadData = findViewById(R.id.btn_upload_data);
+        buttonUploadData.setVisibility(View.VISIBLE);
+        buttonUploadData.setOnClickListener(v -> {
+            if (status) {
+                getLocation();
+            } else {
+                checkForDeviceStatus();
+            }
+        });
+    }
+
+
+    //Checking Internet Connection
     private boolean isDeviceOnline() {
         ConnectivityManager connMgr =
                 (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
         return (networkInfo != null && networkInfo.isConnected());
     }
-    private boolean isGooglePlayServicesAvailable() {
-        GoogleApiAvailability apiAvailability =
-                GoogleApiAvailability.getInstance();
-        final int connectionStatusCode =
-                apiAvailability.isGooglePlayServicesAvailable(this);
-        return connectionStatusCode == ConnectionResult.SUCCESS;
-    }
 
-    private void acquireGooglePlayServices() {
-        GoogleApiAvailability apiAvailability =
-                GoogleApiAvailability.getInstance();
-        final int connectionStatusCode =
-                apiAvailability.isGooglePlayServicesAvailable(this);
-        if (apiAvailability.isUserResolvableError(connectionStatusCode)) {
-            showGooglePlayServicesAvailabilityErrorDialog(connectionStatusCode);
-        }
-    }
-
-    void showGooglePlayServicesAvailabilityErrorDialog(
-            final int connectionStatusCode) {
-        GoogleApiAvailability apiAvailability = GoogleApiAvailability.getInstance();
-        Dialog dialog = apiAvailability.getErrorDialog(
-                MainActivity.this,
-                connectionStatusCode,
-                REQUEST_GOOGLE_PLAY_SERVICES);
-        dialog.show();
-    }
-
+    //Checking Google sign in status
     private void checkSignInStatus() {
         account = GoogleSignIn.getLastSignedInAccount(this);
         mProgress.hide();
@@ -135,13 +124,13 @@ public class MainActivity extends AppCompatActivity {
             signInToGoogle();
         }
         else {
-            mOutputText.setText("Click on the button to upload the data.");
-            requestForLocationPermission();
+            mOutputText.setText(R.string.click_to_upload);
+            requestPermission();
         }
     }
 
+    //Signing in to google
     private void signInToGoogle() {
-        Log.d(TAG, "signInToGoogle: ");
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
                 .requestScopes(new Scope(SheetsScopes.SPREADSHEETS))
@@ -150,28 +139,39 @@ public class MainActivity extends AppCompatActivity {
         Intent signInIntent = mGoogleSignInClient.getSignInIntent();
         startActivityForResult(signInIntent, RC_SIGN_IN);
     }
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        Log.d(TAG, "onActivityResult: ");
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == RC_SIGN_IN) {
-            handleSignInResult(data);
-            mOutputText.setText("Click on the button to upload the data.");
-            requestForLocationPermission();
+            if (resultCode == -1) {
+                handleSignInResult(data);
+                mOutputText.setText(R.string.upload_data);
+                requestPermission();
+            } else {
+                mOutputText.setText(R.string.no_login);
+                buttonUploadData.setText(R.string.try_again);
+                status = false;
+            }
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0) {
                 boolean fineLocationAccepted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
                 if (fineLocationAccepted) {
                     locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
                     if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        onGPS();
+                        turnOnGPS();
                     }
-                    buttonUploadData.setText("Upload Data");
+                    buttonUploadData.setText(R.string.upload_data);
+                    status = true;
+                } else {
+                    mOutputText.setText(R.string.no_location_permission);
+                    status = false;
+                    buttonUploadData.setText(R.string.try_again);
                 }
             }
         }
@@ -179,7 +179,6 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void handleSignInResult(Intent result) {
-        Log.d(TAG, "handleSignInResult: ");
         GoogleSignIn.getSignedInAccountFromIntent(result)
                 .addOnSuccessListener(googleAccount -> {
                     Task<GoogleSignInAccount> completedTask = GoogleSignIn.getSignedInAccountFromIntent(result);
@@ -189,187 +188,125 @@ public class MainActivity extends AppCompatActivity {
                                 GoogleAccountCredential.usingOAuth2(
                                         MainActivity.this, Collections.singleton(SheetsScopes.SPREADSHEETS));
                         mCredential.setSelectedAccount(googleAccount.getAccount());
-
                     } catch (ApiException e) {
-                        Toast.makeText(this, "Couldn't Sign-in!", Toast.LENGTH_SHORT).show();
-                        mOutputText.setText("Couldn't Sign-in!");
+                        mOutputText.setText(R.string.no_login);
                         e.printStackTrace();
                     }
                 })
                 .addOnFailureListener(exception -> {
-                    mOutputText.setText("Couldn't Sign-in!");
-
-                    Toast.makeText(this, "Couldn't Sign-in!", Toast.LENGTH_SHORT).show();
+                    mOutputText.setText(R.string.no_login);
+                    Toast.makeText(this, R.string.no_login, Toast.LENGTH_SHORT).show();
                 });
-
     }
 
-    private void requestForLocationPermission() {
-        if(checkPermission()){
-            locationManager=(LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                onGPS();
-            }
-        }
-        else {
-            requestPermission();
-        }
-    }
-
-
-    private void updateUI() {
-            buttonUploadData=findViewById(R.id.btn_upload_data);
-            buttonUploadData.setVisibility(View.VISIBLE);
-            if(account==null){
-                buttonUploadData.setText("Give Permission");
-            }
-            buttonUploadData.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    account = GoogleSignIn.getLastSignedInAccount(getApplicationContext());
-                    mProgress.hide();
-                    if(account==null){
-                        getResultsFromApi();
-                    }
-                    else {
-                        mOutputText.setText("Click on the button to upload the data.");
-                        locationManager=(LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                            onGPS();
-                        } else {
-                            getLocation();
-                        }                    }
-                }
-            });
-
-
-    }
-    private String getTime(){
+    //To Get Current time
+    private String getTime() {
         Calendar cal = Calendar.getInstance();
-        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
+        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.US);
         return sdf.format(cal.getTime());
     }
 
-    private boolean checkPermission() {
-        int result = ContextCompat.checkSelfPermission(getApplicationContext(), ACCESS_FINE_LOCATION);
-        return result == PackageManager.PERMISSION_GRANTED;
-    }
+    //To Request Location permission
     private void requestPermission() {
         ActivityCompat.requestPermissions(this, new String[]{ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
     }
-    private void onGPS() {
+
+    //To turn on GPS if it is off
+    private void turnOnGPS() {
         final AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setMessage("Enable GPS").setCancelable(false).setPositiveButton("Yes", new  DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-            }
-        }).setNegativeButton("No", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.cancel();
-            }
-        });
+        builder.setMessage("Enable GPS").setCancelable(false).setPositiveButton("Yes", (dialog, which) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))).setNegativeButton("No", (dialog, which) -> dialog.cancel());
         final AlertDialog alertDialog = builder.create();
         alertDialog.show();
     }
+
+    //To get Current Location
     private void getLocation() {
         if (ActivityCompat.checkSelfPermission(
-                MainActivity.this,Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ) {
+                MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
         } else {
-            locationManager=(LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             Location locationGPS = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             if (locationGPS != null) {
                 double lat = locationGPS.getLatitude();
                 double longi = locationGPS.getLongitude();
-                String userEmail=account.getEmail();
-                String userCurrentTime=getTime();
-                String coordinates=lat+"\'"+longi+"\"";
-                sendData(userEmail,userCurrentTime,coordinates);
+                String userEmail = account.getEmail();
+                String userCurrentTime = getTime();
+                String coordinates = lat + "'" + longi + "\"";
+                sendData(userEmail, userCurrentTime, coordinates);
             } else {
+                Log.d("pavan", "getLocation: " + locationManager);
                 Toast.makeText(this, "Unable to find location.", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
+    //To send Data
     private void sendData(String userEmail, String userCurrentTime, String coordinates) {
-        Log.d(TAG, "getLocation: "+userEmail+" "+userCurrentTime+" "+coordinates);
-        mCredential =GoogleAccountCredential.usingOAuth2(MainActivity.this, Collections.singleton(SheetsScopes.SPREADSHEETS));
+        mCredential = GoogleAccountCredential.usingOAuth2(MainActivity.this, Collections.singleton(SheetsScopes.SPREADSHEETS));
         mCredential.setSelectedAccount(account.getAccount());
-        new MakeRequestTask(mCredential,userEmail,userCurrentTime,coordinates).execute();
+        networkOperation(mCredential, userEmail, userCurrentTime, coordinates);
     }
 
-
-    private class MakeRequestTask extends AsyncTask<Void, Void, Boolean> {
-        private com.google.api.services.sheets.v4.Sheets mService = null;
-        private Exception mLastError = null;
-        String userEmail,userTime,userCoordination;
-        MakeRequestTask(GoogleAccountCredential credential,String userEmail,String userTime, String userCoordination){
-            this.userEmail=userEmail;
-            this.userTime=userTime;
-            this.userCoordination=userCoordination;
-            HttpTransport transport = AndroidHttp.newCompatibleTransport();
-            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
-            mService = new com.google.api.services.sheets.v4.Sheets.Builder(
-                    transport, jsonFactory, credential)
-                    .setApplicationName("GoogleSignIn")
-                    .build();
-        }
-
-        @Override
-        protected Boolean doInBackground(Void... params) {
-            try {
-                putDataFromApi(userEmail,userTime,userCoordination);
-                return true;
-            } catch (Exception e) {
-                mLastError = e;
-                cancel(true);
-                return false;
-            }
-        }
-
-
-
-        private List<String> putDataFromApi(String userEmail,String userTime, String userCoordination) throws IOException {
-            String range = "Class Data!A2:B";
-            Object email= userEmail;
-            Object time = userTime;
-            Object coordinates = userCoordination;
-            ValueRange body = new ValueRange()
-                    .setValues(Arrays.asList(
-                            Arrays.asList(email, time,coordinates)
-                    ));
-            AppendValuesResponse result =
-                    this.mService.spreadsheets().values().append(spreadsheetId, range, body)
-                            .setValueInputOption("RAW")
-                            .execute();
-            Log.d("pavan", "putDataFromApi: "+result.getUpdates().getUpdatedCells());
+    //Sheet API Call
+    private AppendValuesResponse putDataToSheetUsingApi(GoogleAccountCredential mCredential, String userEmail, String userTime, String userCoordination) {
+        HttpTransport transport = new NetHttpTransport();
+        JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+        com.google.api.services.sheets.v4.Sheets mService = new com.google.api.services.sheets.v4.Sheets.Builder(
+                transport, jsonFactory, mCredential)
+                .setApplicationName("GoogleSignIn")
+                .build();
+        String range = "Class Data!A2:B";
+        ValueRange body = new ValueRange()
+                .setValues(Collections.singletonList(
+                        Arrays.asList(userEmail, userTime, userCoordination)
+                ));
+        try {
+            return mService.spreadsheets().values().append(spreadsheetId, range, body)
+                    .setValueInputOption("RAW")
+                    .execute();
+        } catch (IOException e) {
+            e.printStackTrace();
             return null;
-
         }
-
-
-        @Override
-        protected void onPreExecute() {
-            mOutputText.setText("");
-            mProgress.show();
-            mProgress.setMessage("Uploading Data.");
-        }
-
-        @Override
-        protected void onPostExecute(Boolean bool) {
-            mProgress.hide();
-            if (!bool) {
-                mOutputText.setText("Could'nt upaload the data.");
-            } else {
-                mOutputText.setText("Data uploaded!");
-            }
-        }
-
-
     }
 
+    //Network operation using RXJava
+    private void networkOperation(GoogleAccountCredential mCredential, String userEmail, String userTime, String userCoordination) {
+        Observable.fromCallable(() -> {
+            AppendValuesResponse response = putDataToSheetUsingApi(mCredential, userEmail, userTime, userCoordination);
+            return response != null;
+
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Observer<Boolean>() {
+                    @Override
+                    public void onSubscribe(@NonNull Disposable d) {
+                        mOutputText.setText("");
+                        mProgress.show();
+                        mProgress.setMessage("Uploading Data.");
+                    }
+
+                    @Override
+                    public void onNext(@NonNull Boolean aBoolean) {
+                        mProgress.hide();
+                        if (aBoolean) {
+                            mOutputText.setText(R.string.data_uploaded);
+                        } else {
+                            mOutputText.setText(R.string.data_not_uploaded);
+                        }
+                    }
+
+                    @Override
+                    public void onError(@NonNull Throwable e) {
+                        mProgress.hide();
+                        mOutputText.setText(R.string.data_not_uploaded);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                    }
+                });
+    }
 
 }
 

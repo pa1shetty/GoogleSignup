@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GoogleSignup</string>
+    <string name="upload_data">Upload Data</string>
 </resources>

@@ -11,7 +11,6 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -43,6 +42,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -55,21 +55,20 @@ import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 
 public class MainActivity extends AppCompatActivity {
     public static final int RC_SIGN_IN = 1;
-    private LocationManager locationManager;
     private Button buttonUploadData;
     private static final int PERMISSION_REQUEST_CODE = 2;
-    public static final String spreadsheetId = "1OOjLS6RoB9Z-7sWzz6Rpz0NfBuQAa7bPg2ClBQSA0nA";
     private static GoogleSignInAccount account;
-    private TextView mOutputText;
+    public static final String spreadsheetId = "1OOjLS6RoB9Z-7sWzz6Rpz0NfBuQAa7bPg2ClBQSA0nA";
+    boolean loginStatus = false;
     ProgressDialog mProgress;
-    boolean status = false;
+    private TextView mMessage;
     private GoogleAccountCredential mCredential;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mOutputText = findViewById(R.id.tv_message);
+        mMessage = findViewById(R.id.tv_message);
         mProgress = new ProgressDialog(this);
         mProgress.setCanceledOnTouchOutside(false);
         mProgress.show();
@@ -83,13 +82,13 @@ public class MainActivity extends AppCompatActivity {
     private void checkForDeviceStatus() {
         if (isDeviceOnline()) {
             mProgress.hide();
-            mOutputText.setText(R.string.network_available);
+            mMessage.setText(R.string.network_available);
             checkSignInStatus();
         } else {
             buttonUploadData.setText(R.string.try_again);
             mProgress.hide();
-            status = false;
-            mOutputText.setText(R.string.network_not_available);
+            loginStatus = false;
+            mMessage.setText(R.string.network_not_available);
         }
     }
 
@@ -99,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
         buttonUploadData = findViewById(R.id.btn_upload_data);
         buttonUploadData.setVisibility(View.VISIBLE);
         buttonUploadData.setOnClickListener(v -> {
-            if (status) {
+            if (loginStatus) {
                 getLocation();
             } else {
                 checkForDeviceStatus();
@@ -120,11 +119,10 @@ public class MainActivity extends AppCompatActivity {
     private void checkSignInStatus() {
         account = GoogleSignIn.getLastSignedInAccount(this);
         mProgress.hide();
-        if(account==null){
+        if (account == null) {
             signInToGoogle();
-        }
-        else {
-            mOutputText.setText(R.string.click_to_upload);
+        } else {
+            mMessage.setText(R.string.click_to_upload);
             requestPermission();
         }
     }
@@ -146,12 +144,12 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == RC_SIGN_IN) {
             if (resultCode == -1) {
                 handleSignInResult(data);
-                mOutputText.setText(R.string.upload_data);
+                mMessage.setText(R.string.click_to_upload);
                 requestPermission();
             } else {
-                mOutputText.setText(R.string.no_login);
+                mMessage.setText(R.string.no_login);
                 buttonUploadData.setText(R.string.try_again);
-                status = false;
+                loginStatus = false;
             }
         }
     }
@@ -162,15 +160,15 @@ public class MainActivity extends AppCompatActivity {
             if (grantResults.length > 0) {
                 boolean fineLocationAccepted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
                 if (fineLocationAccepted) {
-                    locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                    LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
                     if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                         turnOnGPS();
                     }
                     buttonUploadData.setText(R.string.upload_data);
-                    status = true;
+                    loginStatus = true;
                 } else {
-                    mOutputText.setText(R.string.no_location_permission);
-                    status = false;
+                    mMessage.setText(R.string.no_location_permission);
+                    loginStatus = false;
                     buttonUploadData.setText(R.string.try_again);
                 }
             }
@@ -189,12 +187,12 @@ public class MainActivity extends AppCompatActivity {
                                         MainActivity.this, Collections.singleton(SheetsScopes.SPREADSHEETS));
                         mCredential.setSelectedAccount(googleAccount.getAccount());
                     } catch (ApiException e) {
-                        mOutputText.setText(R.string.no_login);
+                        mMessage.setText(R.string.no_login);
                         e.printStackTrace();
                     }
                 })
                 .addOnFailureListener(exception -> {
-                    mOutputText.setText(R.string.no_login);
+                    mMessage.setText(R.string.no_login);
                     Toast.makeText(this, R.string.no_login, Toast.LENGTH_SHORT).show();
                 });
     }
@@ -225,8 +223,20 @@ public class MainActivity extends AppCompatActivity {
                 MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSION_REQUEST_CODE);
         } else {
-            locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            Location locationGPS = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            LocationManager mLocationManager = (LocationManager) getApplicationContext().getSystemService(LOCATION_SERVICE);
+            List<String> providers = mLocationManager.getProviders(true);
+            Location bestLocation = null;
+            for (String provider : providers) {
+                Location l = mLocationManager.getLastKnownLocation(provider);
+                if (l == null) {
+                    continue;
+                }
+                if (bestLocation == null || l.getAccuracy() < bestLocation.getAccuracy()) {
+                    bestLocation = l;
+                }
+            }
+
+            Location locationGPS = bestLocation;
             if (locationGPS != null) {
                 double lat = locationGPS.getLatitude();
                 double longi = locationGPS.getLongitude();
@@ -235,13 +245,11 @@ public class MainActivity extends AppCompatActivity {
                 String coordinates = lat + "'" + longi + "\"";
                 sendData(userEmail, userCurrentTime, coordinates);
             } else {
-                Log.d("pavan", "getLocation: " + locationManager);
                 Toast.makeText(this, "Unable to find location.", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
-    //To send Data
     private void sendData(String userEmail, String userCurrentTime, String coordinates) {
         mCredential = GoogleAccountCredential.usingOAuth2(MainActivity.this, Collections.singleton(SheetsScopes.SPREADSHEETS));
         mCredential.setSelectedAccount(account.getAccount());
@@ -281,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
                 .subscribe(new Observer<Boolean>() {
                     @Override
                     public void onSubscribe(@NonNull Disposable d) {
-                        mOutputText.setText("");
+                        mMessage.setText("");
                         mProgress.show();
                         mProgress.setMessage("Uploading Data.");
                     }
@@ -290,16 +298,16 @@ public class MainActivity extends AppCompatActivity {
                     public void onNext(@NonNull Boolean aBoolean) {
                         mProgress.hide();
                         if (aBoolean) {
-                            mOutputText.setText(R.string.data_uploaded);
+                            mMessage.setText(R.string.data_uploaded);
                         } else {
-                            mOutputText.setText(R.string.data_not_uploaded);
+                            mMessage.setText(R.string.data_not_uploaded);
                         }
                     }
 
                     @Override
                     public void onError(@NonNull Throwable e) {
                         mProgress.hide();
-                        mOutputText.setText(R.string.data_not_uploaded);
+                        mMessage.setText(R.string.data_not_uploaded);
                     }
 
                     @Override
